@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-
+//allow cors for money-tracking-frontend
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://money-tracking-backend.vercel.app',
   'http://localhost:8080',
