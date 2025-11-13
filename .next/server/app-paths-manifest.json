@@ -1,5 +1,3 @@
 {
-  "/api/user/budget/route": "app/api/user/budget/route.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
-  "/api/user/profile/route": "app/api/user/profile/route.js"
+  "/api/auth/register/route": "app/api/auth/register/route.js"
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  'https://insightful-wallets-git-main-satharva2004s-projects.vercel.app',
+  'https://money-tracking-backend.vercel.app',
   'http://localhost:8080',
 ];
 
