@@ -18,12 +18,26 @@ export async function GET(request) {
 
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const month = searchParams.get('month') || new Date().getMonth() + 1;
-    const year = searchParams.get('year') || new Date().getFullYear();
+    const monthParam = searchParams.get('month');
+    const yearParam = searchParams.get('year');
+
+    const now = new Date();
+    const month = monthParam ? parseInt(monthParam, 10) : now.getMonth() + 1;
+    const year = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
+
+    if (isNaN(month) || month < 1 || month > 12 || isNaN(year) || year < 1970) {
+      return errorResponse('Invalid month or year provided', 400);
+    }
 
     // Fetch user profile for budget info
     const userDoc = await adminDb.collection('users').doc(user.uid).get();
     const userProfile = userDoc.data();
+
+    // Fetch monthly budget document (per user, per month)
+    const budgetDocId = `${user.uid}_${year}_${String(month).padStart(2, '0')}`;
+    const budgetDocRef = adminDb.collection('budgets').doc(budgetDocId);
+    const budgetDoc = await budgetDocRef.get();
+    const monthlyBudget = budgetDoc.exists ? budgetDoc.data().monthlyBudget : 0;
 
     // Calculate date range for current month
     const startDate = new Date(year, month - 1, 1);
@@ -58,17 +72,19 @@ export async function GET(request) {
       });
 
     // Calculate budget status
-    const monthlyBudget = userProfile.monthlyBudget || 0;
     const remaining = monthlyBudget - totalSpent;
     const percentageUsed = monthlyBudget > 0 
       ? ((totalSpent / monthlyBudget) * 100).toFixed(2)
       : 0;
 
     // Calculate daily budget (remaining days in month)
-    const today = new Date();
     const daysInMonth = new Date(year, month, 0).getDate();
-    const daysRemaining = Math.max(0, daysInMonth - today.getDate());
-    const dailyBudget = daysRemaining > 0 ? remaining / daysRemaining : 0;
+    let daysRemaining = 0;
+    let dailyBudget = 0;
+    if (year === now.getFullYear() && month === now.getMonth() + 1) {
+      daysRemaining = Math.max(0, daysInMonth - now.getDate());
+      dailyBudget = daysRemaining > 0 ? remaining / daysRemaining : 0;
+    }
 
     return successResponse({
       period: {
@@ -83,6 +99,7 @@ export async function GET(request) {
         percentageUsed: parseFloat(percentageUsed),
         dailyBudget: Math.max(0, dailyBudget),
         status: remaining >= 0 ? 'on_track' : 'over_budget',
+        exists: budgetDoc.exists,
       },
       categoryBreakdown: Object.entries(categorySpending)
         .map(([category, amount]) => ({
@@ -110,9 +127,20 @@ export async function POST(request) {
     const body = await request.json();
 
     // Validate required fields
-    validateRequiredFields(body, ['monthlyBudget']);
+    validateRequiredFields(body, ['monthlyBudget', 'month', 'year']);
 
-    const { monthlyBudget, savingsGoal, categoryBudgets } = body;
+    const { monthlyBudget, month, year, savingsGoal, categoryBudgets } = body;
+
+    const monthNumber = parseInt(month, 10);
+    const yearNumber = parseInt(year, 10);
+
+    if (isNaN(monthNumber) || monthNumber < 1 || monthNumber > 12) {
+      return errorResponse('Month must be between 1 and 12', 400);
+    }
+
+    if (isNaN(yearNumber) || yearNumber < 1970) {
+      return errorResponse('Year must be a valid four digit year', 400);
+    }
 
     // Validate budget values
     if (isNaN(monthlyBudget) || monthlyBudget < 0) {
@@ -126,6 +154,9 @@ export async function POST(request) {
     // Prepare update data
     const updateData = {
       monthlyBudget: parseFloat(monthlyBudget),
+      month: monthNumber,
+      year: yearNumber,
+      userId: user.uid,
       updatedAt: new Date().toISOString(),
     };
 
@@ -137,11 +168,25 @@ export async function POST(request) {
       updateData.categoryBudgets = categoryBudgets;
     }
 
-    // Update user profile
-    await adminDb.collection('users').doc(user.uid).update(updateData);
+    const budgetDocId = `${user.uid}_${yearNumber}_${String(monthNumber).padStart(2, '0')}`;
+    const budgetRef = adminDb.collection('budgets').doc(budgetDocId);
+    const existingDoc = await budgetRef.get();
+
+    const dataToWrite = { ...updateData };
+
+    if (existingDoc.exists) {
+      const existingData = existingDoc.data();
+      if (existingData?.createdAt) {
+        dataToWrite.createdAt = existingData.createdAt;
+      }
+    } else {
+      dataToWrite.createdAt = new Date().toISOString();
+    }
+
+    await budgetRef.set(dataToWrite, { merge: true });
 
     return successResponse(
-      updateData,
+      dataToWrite,
       200,
       'Budget goals updated successfully'
     );
