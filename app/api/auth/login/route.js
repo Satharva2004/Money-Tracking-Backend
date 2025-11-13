@@ -5,10 +5,10 @@
  * This endpoint validates credentials and returns user data
  */
 
-import { adminDb } from '@/lib/firebase/admin';
-import { successResponse, errorResponse } from '@/lib/utils/responseFormatter';
-import { handleApiError, validateRequiredFields } from '@/lib/utils/errorHandler';
-import { isValidEmail } from '@/lib/utils/validators';
+import { adminDb } from '../../../lib/firebase/admin';
+import { successResponse, errorResponse } from '../../../lib/utils/responseFormatter';
+import { handleApiError, validateRequiredFields } from '../../../lib/utils/errorHandler';
+import { isValidEmail } from '../../../lib/utils/validators';
 
 export async function POST(request) {
   try {
