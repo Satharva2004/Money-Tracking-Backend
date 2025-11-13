@@ -3,11 +3,11 @@
  * POST /api/insights - Save user feedback on insights
  */
 
-import { adminDb } from '../../lib/firebase/admin';
-import { successResponse, errorResponse } from '../../lib/utils/responseFormatter';
-import { handleApiError } from '../../lib/utils/errorHandler';
-import { verifyAuth } from '../../lib/middleware/authMiddleware';
-import { generateInsights } from '../../lib/ai/insightsEngine';
+import { adminDb } from '../../../lib/firebase/admin';
+import { successResponse, errorResponse } from '../../../lib/utils/responseFormatter';
+import { handleApiError } from '../../../lib/utils/errorHandler';
+import { verifyAuth } from '../../../lib/middleware/authMiddleware';
+import { generateInsights } from '../../../lib/ai/insightsEngine';
 
 /**
  * GET - Generate AI insights based on user's financial data

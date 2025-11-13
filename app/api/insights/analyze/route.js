@@ -4,10 +4,10 @@
  * Accepts transaction data from client and returns AI-powered recommendations
  */
 
-import { successResponse, errorResponse } from '../../../lib/utils/responseFormatter';
-import { handleApiError } from '../../../lib/utils/errorHandler';
-import { verifyAuth } from '../../../lib/middleware/authMiddleware';
-import { adminDb } from '../../../lib/firebase/admin';
+import { successResponse, errorResponse } from '../../../../lib/utils/responseFormatter';
+import { handleApiError } from '../../../../lib/utils/errorHandler';
+import { verifyAuth } from '../../../../lib/middleware/authMiddleware';
+import { adminDb } from '../../../../lib/firebase/admin';
 
 let tfModulePromise = null;
 

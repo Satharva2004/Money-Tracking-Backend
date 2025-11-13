@@ -5,10 +5,10 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { successResponse, errorResponse } from '../../../lib/utils/responseFormatter';
-import { handleApiError } from '../../../lib/utils/errorHandler';
-import { verifyAuth } from '../../../lib/middleware/authMiddleware';
-import { adminDb } from '../../../lib/firebase/admin';
+import { successResponse, errorResponse } from '../../../../lib/utils/responseFormatter';
+import { handleApiError } from '../../../../lib/utils/errorHandler';
+import { verifyAuth } from '../../../../lib/middleware/authMiddleware';
+import { adminDb } from '../../../../lib/firebase/admin';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
