@@ -3,10 +3,10 @@
  * Logout user and revoke refresh tokens
  */
 
-import { adminAuth } from '@/lib/firebase/admin';
-import { successResponse, errorResponse } from '@/lib/utils/responseFormatter';
-import { handleApiError } from '@/lib/utils/errorHandler';
-import { verifyAuth } from '@/lib/middleware/authMiddleware';
+import { adminAuth } from '../../../../lib/firebase/admin';
+import { successResponse, errorResponse } from '../../../../lib/utils/responseFormatter';
+import { handleApiError } from '../../../../lib/utils/errorHandler';
+import { verifyAuth } from '../../../../lib/middleware/authMiddleware';
 
 export async function POST(request) {
   try {
