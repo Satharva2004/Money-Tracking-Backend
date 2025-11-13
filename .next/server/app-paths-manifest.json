@@ -1,5 +1,5 @@
 {
-  "/api/user/profile/route": "app/api/user/profile/route.js",
   "/api/transactions/route": "app/api/transactions/route.js",
-  "/api/insights/analyze/route": "app/api/insights/analyze/route.js"
+  "/api/user/budget/route": "app/api/user/budget/route.js",
+  "/api/user/profile/route": "app/api/user/profile/route.js"
 }

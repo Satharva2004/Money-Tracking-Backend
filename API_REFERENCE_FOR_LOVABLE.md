@@ -885,6 +885,56 @@ If the token is already invalid/expired, the route returns `200` with message `"
 
 ---
 
+## 5. AI Chat Assistant (Gemini-Powered)
+
+### 5.1 Send Message to AI Assistant
+`POST /api/ai/chat`
+
+**Body**
+```json
+{
+  "message": "How can I save more money this month?",
+  "conversationHistory": []
+}
+```
+
+**Success (200)**
+```json
+{
+  "success": true,
+  "message": "Message sent successfully",
+  "data": {
+    "message": "Great question! 💰 Based on your recent spending patterns, I've identified a few areas where you can save:\n\n• **Food expenses**: You've spent $450 on food this month. Try meal prepping on Sundays to reduce restaurant visits by 30-40%.\n• **Shopping**: Your shopping expenses are $320. Consider the 24-hour rule before non-essential purchases.\n• **Subscriptions**: Review your subscriptions - you might have unused services costing you money.\n\nIf you implement these changes, you could save around $200-250 this month! 🎯\n\nWould you like me to help you create a specific budget plan?",
+    "conversationHistory": [
+      {
+        "role": "user",
+        "content": "How can I save more money this month?",
+        "timestamp": "2025-11-13T00:15:42.100Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Great question! 💰 Based on your recent spending...",
+        "timestamp": "2025-11-13T00:15:42.150Z"
+      }
+    ],
+    "timestamp": "2025-11-13T00:15:42.100Z"
+  },
+  "timestamp": "2025-11-13T00:15:42.100Z"
+}
+```
+
+**Notes:**
+- First message in a conversation automatically includes user's financial summary (last 100 transactions)
+- `conversationHistory` is an array that frontend manages (no server-side persistence)
+- Pass empty array `[]` for new conversations
+- Pass previous `conversationHistory` from response to continue conversation
+- AI maintains context only through the array you pass
+- Responses are personalized based on actual transaction data
+- AI never reveals it's Gemini - presents as proprietary financial advisor
+- Frontend should store conversation history in component state or localStorage
+
+---
+
 ## 🔄 Token Refresh Strategy
 - When `idToken` expires (`expiresIn` ≈ 1 hour), Lovable should call Firebase Auth SDK’s `onIdTokenChanged` or `getIdToken(true)` to refresh using `refreshToken`.
 - Backend routes simply require a valid ID token; no refresh handling serverside.
