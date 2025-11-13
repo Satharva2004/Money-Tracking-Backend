@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
+  'https://insightful-wallets-git-main-satharva2004s-projects.vercel.app',
   'http://localhost:8080',
 ];
 
