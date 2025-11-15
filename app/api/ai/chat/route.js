@@ -49,7 +49,7 @@ const SYSTEM_PROMPT = `You are a highly intelligent and personalized AI financia
 - Keep responses conversational and easy to understand
 - Use bullet points for lists of recommendations
 - Include relevant emojis to make advice engaging
-- Show table of contents for the response
+- Keep the response concise and short to the point no extra details
 - Use markdown to format the response
 - End with follow up questions or call-to-action when appropriate
 
@@ -154,7 +154,7 @@ export async function POST(request) {
       history: geminiHistory,
       generationConfig: {
         maxOutputTokens: 1000,
-        temperature: 0.7,
+        temperature: 0.1,
         topP: 0.8,
         topK: 40,
       },
