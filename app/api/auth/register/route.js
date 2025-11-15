@@ -48,7 +48,7 @@ export async function POST(request) {
       uid: userRecord.uid,
       email: userRecord.email,
       name: sanitizedName,
-      currency: 'USD',
+      currency: 'INR',
       monthlyBudget: 0,
       savingsGoal: 0,
       createdAt: new Date().toISOString(),
@@ -61,6 +61,19 @@ export async function POST(request) {
     };
 
     await adminDb.collection('users').doc(userRecord.uid).set(userProfile);
+
+    const now = new Date();
+    const defaultBudgetDocId = `${userRecord.uid}_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}`;
+    await adminDb.collection('budgets').doc(defaultBudgetDocId).set({
+      monthlyBudget: 0,
+      savingsGoal: 0,
+      categoryBudgets: {},
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+      userId: userRecord.uid,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
 
     // Return success response (without password)
     return successResponse(
