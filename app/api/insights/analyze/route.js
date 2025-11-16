@@ -127,7 +127,7 @@ async function analyzeSpendingPatterns(transactions) {
   if (totalExpenses > 0) {
     insights.push({
       type: 'spending_overview',
-      message: `You've spent $${totalExpenses.toFixed(2)} across ${expenses.length} transactions.`,
+      message: `You've spent ${totalExpenses.toFixed(2)} across ${expenses.length} transactions.`,
       icon: '💰',
       data: { totalExpenses, transactionCount: expenses.length },
     });
@@ -140,7 +140,7 @@ async function analyzeSpendingPatterns(transactions) {
 
     insights.push({
       type: 'top_category',
-      message: `Your biggest expense is **${topCategory}** at $${topAmount.toFixed(2)} (${percentageValue.toFixed(0)}% of total spending).`,
+      message: `Your biggest expense is **${topCategory}** at ${topAmount.toFixed(2)} (${percentageValue.toFixed(0)}% of total spending).`,
       icon: '📊',
       data: { category: topCategory, amount: topAmount, percentage: percentageValue.toFixed(0) },
     });
@@ -191,7 +191,7 @@ async function analyzeSpendingPatterns(transactions) {
   if (tfAnalysis.hasEnoughData) {
     insights.push({
       type: 'ml_analysis',
-      message: `🤖 TensorFlow estimates your average expense at $${tfAnalysis.averageExpense.toFixed(2)} with a variability of $${tfAnalysis.stdDeviation.toFixed(2)}.`,
+      message: `🤖 TensorFlow estimates your average expense at ${tfAnalysis.averageExpense.toFixed(2)} with a variability of ${tfAnalysis.stdDeviation.toFixed(2)}.`,
       icon: '🤖',
       priority: tfAnalysis.riskScore > 70 ? 'high' : tfAnalysis.riskScore > 40 ? 'medium' : 'low',
       data: tfAnalysis,
@@ -208,7 +208,7 @@ async function analyzeSpendingPatterns(transactions) {
     } else {
       insights.push({
         type: 'ml_projection',
-        message: `📈 Based on recent patterns, your next-period spending is projected around $${tfAnalysis.predictedNextPeriod.toFixed(2)}.`,
+        message: `📈 Based on recent patterns, your next-period spending is projected around ${tfAnalysis.predictedNextPeriod.toFixed(2)}.`,
         icon: '📈',
         priority: 'medium',
         data: {
