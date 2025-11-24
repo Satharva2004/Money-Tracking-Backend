@@ -9,6 +9,9 @@ import { handleApiError } from '../../../../lib/utils/errorHandler';
 import { verifyAuth } from '../../../../lib/middleware/authMiddleware';
 import { adminDb } from '../../../../lib/firebase/admin';
 
+const DAYS_WINDOW = 30;
+const MIN_TRANSACTIONS_FOR_PREDICTION = 10;
+
 let tfModulePromise = null;
 
 async function getTensorFlow() {
@@ -38,21 +41,58 @@ function tfAnalysisHasData(analysis) {
 }
 
 /**
- * Analyze spending patterns using simple ML heuristics
- * Ready for TensorFlow.js integration
+ * Analyze spending patterns using TensorFlow.js time-series prediction
+ * over the last 30 days of expenses with a simple linear regression model.
  */
 async function runTensorFlowAnalysis(expenses) {
-  const expenseAmounts = expenses
-    .map(t => Number(t.amount) || 0)
-    .filter(amount => amount > 0);
+  const now = new Date();
+  const nowTime = now.getTime();
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const windowStart = nowTime - (DAYS_WINDOW - 1) * msPerDay;
 
-  if (expenseAmounts.length < 2) {
+  const recentExpenses = expenses.filter(t => {
+    if (!t || !t.date || t.type !== 'expense') return false;
+    const txTime = new Date(t.date).getTime();
+    if (Number.isNaN(txTime)) return false;
+    return txTime >= windowStart && txTime <= nowTime;
+  });
+
+  if (recentExpenses.length < MIN_TRANSACTIONS_FOR_PREDICTION) {
     return {
       hasEnoughData: false,
       averageExpense: 0,
       stdDeviation: 0,
       riskScore: 0,
       predictedNextPeriod: 0,
+      sampleSize: recentExpenses.length,
+      daysAnalyzed: 0,
+    };
+  }
+
+  const buckets = {};
+
+  recentExpenses.forEach(t => {
+    const txTime = new Date(t.date).getTime();
+    const dayIndex = Math.floor((txTime - windowStart) / msPerDay);
+    const prev = buckets[dayIndex] || 0;
+    buckets[dayIndex] = prev + (Number(t.amount) || 0);
+  });
+
+  const dayIndexes = Object.keys(buckets)
+    .map(index => parseInt(index, 10))
+    .sort((a, b) => a - b);
+
+  const series = dayIndexes.map(index => buckets[index]);
+
+  if (series.length < 2) {
+    return {
+      hasEnoughData: false,
+      averageExpense: 0,
+      stdDeviation: 0,
+      riskScore: 0,
+      predictedNextPeriod: 0,
+      sampleSize: recentExpenses.length,
+      daysAnalyzed: series.length,
     };
   }
 
@@ -64,36 +104,84 @@ async function runTensorFlowAnalysis(expenses) {
       stdDeviation: 0,
       riskScore: 0,
       predictedNextPeriod: 0,
+      sampleSize: recentExpenses.length,
+      daysAnalyzed: series.length,
       error: 'tf_load_failed',
     };
   }
 
-  return tf.tidy(() => {
-    const tensor = tf.tensor1d(expenseAmounts);
-    const { mean, variance } = tf.moments(tensor);
-    const std = tf.sqrt(variance);
+  const xs = series.map((_, index) => index);
+  const ys = series;
 
-    const meanValue = mean.dataSync()[0];
-    const stdValue = std.dataSync()[0];
+  const maxX = Math.max(...xs, 1);
+  const maxY = Math.max(...ys, 1);
 
+  const xNorm = xs.map(value => value / maxX);
+  const yNorm = ys.map(value => value / maxY);
+
+  const xsTensor = tf.tensor2d(xNorm, [xNorm.length, 1]);
+  const ysTensor = tf.tensor2d(yNorm, [yNorm.length, 1]);
+
+  const model = tf.sequential();
+  model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
+  model.compile({ optimizer: tf.train.sgd(0.1), loss: 'meanSquaredError' });
+
+  let predictionTensor = null;
+
+  try {
+    await model.fit(xsTensor, ysTensor, { epochs: 50, verbose: 0 });
+
+    const nextIndex = xs.length;
+    const nextXNorm = nextIndex / maxX;
+    predictionTensor = model.predict(tf.tensor2d([nextXNorm], [1, 1]));
+    const predictionData = predictionTensor.dataSync();
+    const predictedNorm = predictionData[0];
+    const predictedAmount = Math.max(0, predictedNorm * maxY);
+
+    const totalSpent = ys.reduce((sum, value) => sum + value, 0);
+    const averageDaily = series.length > 0 ? totalSpent / series.length : 0;
+
+    const meanValue = averageDaily;
+    const variance =
+      series.length > 0
+        ? series.reduce((sum, value) => sum + Math.pow(value - meanValue, 2), 0) / series.length
+        : 0;
+    const stdValue = Math.sqrt(variance);
     const variability = meanValue === 0 ? 0 : (stdValue / meanValue) * 100;
     const riskScore = Math.max(0, Math.min(100, variability * 1.2));
 
-    // Simple projection: mean + half std dev as next period expectation
-    const predicted = meanValue + stdValue * 0.5;
-
     return {
       hasEnoughData: true,
-      averageExpense: meanValue,
+      averageExpense: averageDaily,
       stdDeviation: stdValue,
       riskScore,
-      predictedNextPeriod: predicted,
-      sampleSize: expenseAmounts.length,
+      predictedNextPeriod: predictedAmount,
+      sampleSize: recentExpenses.length,
+      daysAnalyzed: series.length,
     };
-  });
+  } catch (error) {
+    console.error('TensorFlow time-series analysis failed:', error);
+    return {
+      hasEnoughData: false,
+      averageExpense: 0,
+      stdDeviation: 0,
+      riskScore: 0,
+      predictedNextPeriod: 0,
+      sampleSize: recentExpenses.length,
+      daysAnalyzed: series.length,
+      error: 'tf_analysis_failed',
+    };
+  } finally {
+    xsTensor.dispose();
+    ysTensor.dispose();
+    if (predictionTensor) {
+      predictionTensor.dispose();
+    }
+    model.dispose();
+  }
 }
 
-async function analyzeSpendingPatterns(transactions) {
+async function analyzeSpendingPatterns(transactions, userProfile) {
   if (!transactions || transactions.length === 0) {
     return {
       hasData: false,
@@ -122,6 +210,42 @@ async function analyzeSpendingPatterns(transactions) {
   const topCategories = Object.entries(categoryTotals)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
+
+  const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+
+  const monthExpenses = expenses.filter(t => {
+    const date = new Date(t.date);
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  });
+
+  const monthlyExpenses = monthExpenses.reduce((sum, t) => sum + t.amount, 0);
+
+  const monthlyBudget =
+    userProfile && typeof userProfile.monthlyBudget === 'number'
+      ? userProfile.monthlyBudget
+      : 0;
+
+  if (monthlyBudget > 0) {
+    const budgetUsage = (monthlyExpenses / monthlyBudget) * 100;
+
+    if (budgetUsage >= 80) {
+      insights.push({
+        type: 'budget_overrun_risk',
+        message: `Your actual expenditure has reached ${budgetUsage.toFixed(
+          1,
+        )}% of your fixed monthly budget. This is treated as a high-priority financial alert so that you can take corrective action before the end of the period.`,
+        icon: '⚠️',
+        priority: 'high',
+        data: {
+          monthlyBudget,
+          spent: monthlyExpenses,
+          percentageUsed: parseFloat(budgetUsage.toFixed(1)),
+        },
+      });
+    }
+  }
 
   // Insight 1: Spending overview
   if (totalExpenses > 0) {
@@ -156,38 +280,25 @@ async function analyzeSpendingPatterns(transactions) {
     }
   }
 
-  // Insight 3: Savings rate
+  // Insight 3: Savings rate vs recommended 20%
   if (totalIncome > 0) {
-    const savingsRate = ((totalSavings / totalIncome) * 100).toFixed(1);
-    
-    if (parseFloat(savingsRate) < 10) {
-      insights.push({
-        type: 'savings_alert',
-        message: `⚠️ Your savings rate is ${savingsRate}%. Financial experts recommend saving at least 20% of your income.`,
-        icon: '⚠️',
-        priority: 'medium',
-        data: { savingsRate: parseFloat(savingsRate), target: 20 },
-      });
-    } else if (parseFloat(savingsRate) >= 20) {
-      insights.push({
-        type: 'savings_success',
-        message: `🎉 Great job! You're saving ${savingsRate}% of your income. Keep up the excellent work!`,
-        icon: '🎉',
-        priority: 'positive',
-        data: { savingsRate: parseFloat(savingsRate) },
-      });
-    } else {
-      insights.push({
-        type: 'savings_progress',
-        message: `You're saving ${savingsRate}% of your income. Try to increase this to 20% for better financial security.`,
-        icon: '📈',
-        priority: 'medium',
-        data: { savingsRate: parseFloat(savingsRate), target: 20 },
-      });
-    }
+    const savingsRate = (totalSavings / totalIncome) * 100;
+
+    insights.push({
+      type: 'savings_rate',
+      message: `Your savings rate is ${savingsRate.toFixed(
+        1,
+      )}%. This is compared against the commonly recommended target of saving 20% of income (Chen, 2024).`,
+      icon: '🐷',
+      priority: 'low',
+      data: {
+        savingsRate: parseFloat(savingsRate.toFixed(1)),
+        target: 20,
+      },
+    });
   }
 
-  // Insight 3b: TensorFlow variance insight
+  // Insight 3b: TensorFlow time-series prediction insight
   if (tfAnalysis.hasEnoughData) {
     insights.push({
       type: 'ml_analysis',
@@ -197,26 +308,20 @@ async function analyzeSpendingPatterns(transactions) {
       data: tfAnalysis,
     });
 
-    if (tfAnalysis.riskScore > 70) {
-      insights.push({
-        type: 'ml_risk_alert',
-        message: `⚠️ TensorFlow detected highly volatile spending. Your risk score is ${tfAnalysis.riskScore.toFixed(0)}. Consider tightening your budget controls.`,
-        icon: '⚠️',
-        priority: 'high',
-        data: { riskScore: tfAnalysis.riskScore },
-      });
-    } else {
-      insights.push({
-        type: 'ml_projection',
-        message: `📈 Based on recent patterns, your next-period spending is projected around ${tfAnalysis.predictedNextPeriod.toFixed(2)}.`,
-        icon: '📈',
-        priority: 'medium',
-        data: {
-          projection: tfAnalysis.predictedNextPeriod,
-          averageExpense: tfAnalysis.averageExpense,
-        },
-      });
-    }
+    insights.push({
+      type: 'ml_projection',
+      message: `📈 A TensorFlow.js linear regression model analyzed your last 30 days of expenses to forecast the next period. This prediction becomes more accurate as more historical data is available (requires at least 10 expense transactions). Your next-period spending is projected around ${tfAnalysis.predictedNextPeriod.toFixed(
+        2,
+      )}.`,
+      icon: '📈',
+      priority: 'medium',
+      data: {
+        projection: tfAnalysis.predictedNextPeriod,
+        averageExpense: tfAnalysis.averageExpense,
+        daysAnalyzed: tfAnalysis.daysAnalyzed,
+        sampleSize: tfAnalysis.sampleSize,
+      },
+    });
   }
 
   // Insight 4: Spending trend (last 7 days vs previous 7 days)
@@ -308,6 +413,9 @@ export async function POST(request) {
     // Verify authentication
     const user = await verifyAuth(request);
 
+    const userDoc = await adminDb.collection('users').doc(user.uid).get();
+    const userProfile = userDoc.exists ? userDoc.data() : {};
+
     // Parse request body
     const body = await request.json();
     const { transactions, period } = body;
@@ -336,7 +444,7 @@ export async function POST(request) {
     }
 
     // Run analysis
-    const analysis = await analyzeSpendingPatterns(transactionsToAnalyze);
+    const analysis = await analyzeSpendingPatterns(transactionsToAnalyze, userProfile);
 
     // Save analysis to insights collection for history
     if (analysis.hasData) {
